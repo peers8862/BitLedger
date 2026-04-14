@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+usage() {
+  cat << 'EOF'
+blctl — BitLedger Dev System CLI
+
+Usage: blctl <command> [args]
+
+Task Lifecycle:
+  status                                  System readiness and active task summary
+  new-task <TASK-ID> <"goal">             Generate task card + index in TASKS.md
+  dispatch <role> <topic> <card-path>     Create git worktree on agent/<role>/<topic>
+  task-status                             Focused view: pending/in-progress/blocked cards
+  worktrees [clean]                       List active worktrees; clean merged ones
+
+Codebase Health:
+  health                                  Composite health check (tests, TODOs, worktrees)
+  todo-scan                               Scan production paths for untracked TODOs (Gate E)
+  diff-summary [<range>]                  Summarise what changed: files, cards, tests
+
+Release & Gates:
+  release-check                           Automated Gate D — full release readiness check
+  gates                                   Print Gates A–E quick reference
+  fragility                               Print serialized and high-fragility file list
+
+Logging & Decisions:
+  log "<message>"                         Append timestamped entry to decisions.md
+  decisions [--last <n>]                  Print last N decisions (default: 5)
+
+Examples:
+  blctl status
+  blctl health
+  blctl todo-scan
+  blctl diff-summary
+  blctl diff-summary HEAD~3..HEAD
+  blctl task-status
+  blctl worktrees
+  blctl worktrees clean
+  blctl release-check
+  blctl log "Decided to use two-phase bit construction for encoder"
+  blctl decisions --last 3
+  blctl new-task TASK-001 "Initialize Python project structure"
+  blctl dispatch builder init-structure tasks/cards/TASK-001.md
+  blctl gates
+  blctl fragility
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+
+case "${cmd}" in
+  # ── Task Lifecycle ────────────────────────────────────────────────────────────
+  status)
+    "${ROOT}/scripts/system-status.sh" "$@"
+    ;;
+  new-task)
+    "${ROOT}/scripts/new-task.sh" "$@"
+    ;;
+  dispatch)
+    "${ROOT}/scripts/dispatch-worktree.sh" "$@"
+    ;;
+  task-status)
+    CARDS_DIR="${ROOT}/tasks/cards"
+    echo "Task Status"
+    echo "─────────────────────────────────────────────────────────────"
+    for status_filter in "in-progress" "in-review" "blocked" "pending"; do
+      found=0
+      while IFS= read -r card; do
+        STATUS="$(grep "^Status:" "${card}" 2>/dev/null | awk '{print $2}' || echo "")"
+        [[ "${STATUS}" != "${status_filter}" ]] && continue
+        found=1
+        GOAL="$(grep "^Goal:" "${card}" 2>/dev/null | sed 's/^Goal: *//' | cut -c1-55 || echo "")"
+        FRAG="$(grep "^Fragility:" "${card}" 2>/dev/null | sed 's/^Fragility: *//' | cut -c1-30 || echo "")"
+        printf "  %-14s %-14s %-56s %s\n" \
+          "$(basename "${card}" .md)" "[${STATUS}]" "${GOAL}" "${FRAG}"
+      done < <(find "${CARDS_DIR}" -name "TASK-*.md" 2>/dev/null | sort)
+    done
+    ;;
+  worktrees)
+    source "${ROOT}/scripts/common.sh"
+    ACTION="${1:-list}"
+    if [[ "${ACTION}" == "clean" ]]; then
+      echo "Cleaning merged worktrees..."
+      git -C "${PROJECT_ROOT}" worktree list 2>/dev/null | grep "agent/" | awk '{print $1}' | while IFS= read -r wt; do
+        branch=$(git -C "${PROJECT_ROOT}" worktree list 2>/dev/null | grep "${wt}" | grep -o '\[.*\]' | tr -d '[]')
+        if git -C "${PROJECT_ROOT}" branch --merged main 2>/dev/null | grep -qF "${branch}"; then
+          echo "  Removing merged: ${branch}"
+          git -C "${PROJECT_ROOT}" worktree remove "${wt}" --force 2>/dev/null || true
+          git -C "${PROJECT_ROOT}" branch -D "${branch}" 2>/dev/null || true
+        fi
+      done
+      echo "Done."
+    else
+      echo "Active Worktrees"
+      echo "─────────────────────────────────────────────────────────────"
+      TREES=$(git -C "${PROJECT_ROOT}" worktree list 2>/dev/null | grep "agent/" || true)
+      if [[ -z "${TREES}" ]]; then
+        echo "  (none)"
+      else
+        NOW=$(date +%s)
+        while IFS= read -r line; do
+          path=$(echo "${line}" | awk '{print $1}')
+          branch=$(echo "${line}" | grep -o '\[.*\]' | tr -d '[]')
+          mtime=$(stat -f "%m" "${path}" 2>/dev/null || stat -c "%Y" "${path}" 2>/dev/null || echo "${NOW}")
+          age=$(( (NOW - mtime) / 86400 ))
+          dirty=$(git -C "${path}" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+          dirty_flag=""
+          [[ "${dirty}" -gt 0 ]] && dirty_flag=" [${dirty} uncommitted]"
+          printf "  %-45s %dd old%s\n" "${branch}" "${age}" "${dirty_flag}"
+        done <<< "${TREES}"
+      fi
+    fi
+    ;;
+
+  # ── Codebase Health ───────────────────────────────────────────────────────────
+  health)
+    "${ROOT}/scripts/health.sh" "$@"
+    ;;
+  todo-scan)
+    "${ROOT}/scripts/todo-scan.sh" "$@"
+    ;;
+  diff-summary)
+    "${ROOT}/scripts/diff-summary.sh" "$@"
+    ;;
+
+  # ── Release & Gates ───────────────────────────────────────────────────────────
+  release-check)
+    "${ROOT}/scripts/release-check.sh" "$@"
+    ;;
+  gates)
+    echo "Hard Gates A–E (all are merge blockers):"
+    echo ""
+    grep -A1 "^  [A-E]:" "${ROOT}/config/gates.yaml" | grep -v "^--$" | \
+      sed 's/^  //' | sed 's/name:/Gate/' | sed 's/rule:/  →/'
+    ;;
+  fragility)
+    echo "Serialized ownership (never parallel):"
+    sed 's/^[^#]/  &/' "${ROOT}/config/serialization-paths.txt" | grep -v "^#" | grep -v "^$"
+    echo ""
+    echo "High-fragility (require Orchestrator approval):"
+    echo "  bitledger/encoder.py"
+    echo "  bitledger/decoder.py"
+    echo "  bitledger/models.py"
+    echo ""
+    echo "Full policy: system/fragility-register.md"
+    ;;
+
+  # ── Logging & Decisions ───────────────────────────────────────────────────────
+  log)
+    source "${ROOT}/scripts/common.sh"
+    MSG="${1:-}"
+    [[ -z "${MSG}" ]] && { echo "ERROR: message required" >&2; echo "Usage: blctl log \"<message>\"" >&2; exit 1; }
+    DECISIONS="${ROOT}/logs/decisions.md"
+    [[ -f "${DECISIONS}" ]] || fail "decisions.md not found at ${DECISIONS}"
+    DATE=$(date +"%Y-%m-%d")
+    printf '\n## %s — %s\n\n**Decision:** \n\n**Context:** \n\n**Why:** \n\n**Consequence:** \n' \
+      "${DATE}" "${MSG}" >> "${DECISIONS}"
+    echo "Appended to decisions.md: ${DATE} — ${MSG}"
+    ;;
+  decisions)
+    source "${ROOT}/scripts/common.sh"
+    N=5
+    [[ "${1:-}" == "--last" && -n "${2:-}" ]] && N="${2}"
+    DECISIONS="${ROOT}/logs/decisions.md"
+    [[ -f "${DECISIONS}" ]] || fail "decisions.md not found"
+    echo "Last ${N} decisions:"
+    echo ""
+    grep "^## " "${DECISIONS}" | tail -"${N}" | sed 's/^## /  /'
+    ;;
+
+  # ── Help ──────────────────────────────────────────────────────────────────────
+  "" | -h | --help | help)
+    usage
+    ;;
+  *)
+    echo "ERROR: Unknown command: ${cmd}" >&2
+    echo ""
+    usage
+    exit 1
+    ;;
+esac

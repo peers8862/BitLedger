@@ -1,0 +1,4 @@
+# Serialized ownership — never modify these files in parallel agent streams
+# One writer at a time. Confirm no other active Builder task touches these before dispatch.
+
+bitledger/bitledger.py

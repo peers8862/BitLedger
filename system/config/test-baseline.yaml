@@ -1,0 +1,44 @@
+test_baseline:
+  default:
+    command: "python -m pytest tests/"
+    description: "Full test suite — run before any merge"
+
+  by_change_type:
+    encoder:
+      files: ["bitledger/encoder.py"]
+      required:
+        - "python -m pytest tests/test_encoder.py tests/test_roundtrip.py"
+        - "python -m pytest tests/"
+
+    decoder:
+      files: ["bitledger/decoder.py"]
+      required:
+        - "python -m pytest tests/test_decoder.py tests/test_roundtrip.py"
+        - "python -m pytest tests/"
+
+    control:
+      files: ["bitledger/control.py"]
+      required:
+        - "python -m pytest tests/test_control.py"
+        - "python -m pytest tests/"
+
+    models:
+      files: ["bitledger/models.py"]
+      required:
+        - "python -m pytest tests/"
+        - "grep -r 'Layer1Config\\|Layer2Config\\|TransactionRecord\\|SessionState' bitledger/ tests/"
+
+    values:
+      files: ["bitledger/currencies.py"]
+      required:
+        - "python -m pytest tests/test_values.py"
+        - "python -m pytest tests/"
+
+    profiles:
+      files: ["bitledger/profiles.py"]
+      required:
+        - "python -m pytest tests/"
+
+    any:
+      required:
+        - "python -m pytest tests/"
