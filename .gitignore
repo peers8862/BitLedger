@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Test caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Profiles (never commit real session profiles)
+bitledger/profiles/*.json
+
+# Scratch / working notes
+project/scratch/
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Binary outputs
+*.bl

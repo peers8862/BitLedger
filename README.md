@@ -233,10 +233,17 @@ bitledger simulate --profile retail --compound --enquiry
 | `profiles.py` | Profile load/save/list/delete |
 | `currencies.py` | Seeded 32-currency table |
 | `errors.py` | Exception hierarchy |
+| `rounding_report.py` | Typed − wire rounding observations and CLI aggregate text |
 | `profiles/` | Saved named profile JSON files |
 | `tests/` | Full test suite including round-trip and value range tests |
 | `docs/BitLedger_Protocol_v3.docx` | Full protocol specification |
 | `docs/BitLedger_Technical_Overview.docx` | Implementation guide |
+
+---
+
+## Large amounts and rounding audit (Python CLI)
+
+Plan with **`bitledger make`** / **`suggest-sf`** (SF search defaults to **exact-first** in range **0…127**; **`--legacy-sf-search`** restores first-fit). When **`encode --amount`** would set rounding bits, pass **`--accept-rounding`**. Append **`--rounding-report`** on **`encode`** (with **`--amount`**), **`decode`** (use **`--compare-amount DECIMAL`** for \(\Delta\) totals), **`make`**, or **`check-amount`** to print **typed − wire** residuals with **SF index** and **dp**. **`make --json --rounding-report`** embeds a **`rounding_observation`** object. Details: **`cli_readme.md`**, **`project/analysis/value_encoding_scaling_factor_reference.md`**.
 
 ---
 

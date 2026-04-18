@@ -77,8 +77,10 @@ Shared resolution: **`--profile`**, then **`BITLEDGER_PROFILE`**, then **active 
 
 - **Without `--sf`:** searches **`--min-sf` … `--max-sf`** (defaults **0 … 127**) for the **smallest** SF with an **exact** encoding (`rounding_flag = 0`) when possible; otherwise the smallest SF where `encode_value` succeeds. Pass **`--legacy-sf-search`** to restore the older rule (first ascending SF with any success).
 - **With `--sf`:** validates that index only (or exits **2**).
+- **`--rounding-report`:** after the normal report, append a **typed − wire** block (scale **`k`**, **`dp`**, **`rf`/`rd`**, \(\Delta\) sum/mean for the planned amount).
+- **`--quantity-present` `0`|`1`:** matches **`encode`**; when **`1`**, suggested **`encode`** includes **`--quantity-present 1`**, JSON includes **`quantity_present`**, and decode lines in **`make`** / reports use **\(N = A \times r\)** semantics for the wire value.
 
-**`make`** — full **plan → record** output plus **Suggested encode** one-liner. **`make --json`** (and **`suggest-sf --json`**) prints the same plan as **JSON** (for scripts).
+**`make`** — full **plan → record** output plus **Suggested encode** one-liner. **`make --json`** (and **`suggest-sf --json`**) prints the plan as **JSON**; with **`--rounding-report`**, adds **`rounding_observation`** (typed / wire / \(\Delta\) / scale fields).
 
 **`check-amount`** — same math, **verification-first**: **STATUS** (EXACT vs ROUNDING), compact number block, reminder to run **`make`** for the encode line. No `bitledger encode …` dump.
 
@@ -154,6 +156,7 @@ Emits **14 bytes** by default when Layer 2 uses short form (`0x6F`): 8 (L1) + 1 
 | `--min-sf`, `--max-sf` | Bounds for **`--auto-sf`** search only |
 | `--legacy-sf-search` | With **`--auto-sf`**: first ascending SF with any valid encoding (old behaviour) |
 | `--accept-rounding` | With **`--amount`**: required when encode would set **rounding_flag** (non-exact wire value); otherwise encode exits **2** with a short explanation |
+| `--rounding-report` | With **`--amount`**: print scale (**SF index `k`**, **`dp`**) and **typed − wire** table plus \(\Delta\) sum/mean (stdout; works with **`--quiet`**) |
 | `--A`, `--r` | Raw value limbs when `--amount` is omitted |
 | `--rounding-flag`, `--rounding-dir`, `--split-order` | Layer 3 flags |
 | `--direction`, `--status`, `--debit-credit` | Posting semantics |
@@ -190,6 +193,8 @@ bitledger encode --quiet --amount 2500000000 --auto-sf --dp 2 --account-pair 4 -
 | `RECORD_HEX` | Optional continuous hex (spaces allowed) if `--in` is not used |
 | `--in PATH` | Read binary `.bl` from file |
 | `--quiet` | Suppress headers, journal, and record summary |
+| `--rounding-report` | Append scale (**`k`**, **`dp`**) and wire amount; optional \(\Delta\) vs **`--compare-amount`** (stderr hints if **`--compare-amount`** omitted) |
+| `--compare-amount DECIMAL` | With **`--rounding-report`**: typed amount for **typed − wire** (\(\Delta\)) and aggregate lines |
 
 After unpack, **Rule 6** is enforced: account pair `1111` is rejected unless Layer 1 `compound_mode_active` is on and Layer 2 `compound_prefix != 00`.
 
@@ -228,6 +233,8 @@ When not `--quiet`, `encode` and `decode` print:
 1. Layer 1 and Layer 2 header blocks  
 2. A **README-aligned journal** (`BITLEDGER JOURNAL ENTRY`, session/batch lines, DEBIT/CREDIT narrative, description/status/precision, optional **Binary** / **Hex** from the 40-bit word)  
 3. A compact `BITLEDGER RECORD` summary (including pipe-grouped binary per TASK-2.09)
+
+**`--rounding-report`** may still print after **`encode --quiet`** or **`decode --quiet`** (structured **typed − wire** footer).
 
 ---
 

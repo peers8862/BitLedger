@@ -6,10 +6,10 @@ Consolidated from implementation review: **what is solid**, **edge cases** (reje
 
 ## 1. Solid and usable (good to go)
 
-- **Value path:** `encode_value` / `decompose`, rounding modes, overflow checks, **Decimal-only** monetary input, **SF indices 0–17** via `SCALING_FACTORS`, quantity vs split decode in `decode_value`.
+- **Value path:** `encode_value` / `decompose`, rounding modes, overflow checks, **Decimal-only** monetary input, **SF indices 0–127** via `SCALING_FACTORS` (aligned with 7-bit Layer 2 wire), **exact-first** SF search by default (see `find_smallest_sf` / `--legacy-sf-search`), quantity vs split decode in `decode_value`.
 - **Layer packing:** Layer 1 (incl. **CRC-15**), Layer 2 (full + **0x6F** short form), **40-bit** Layer 3 `serialise` / `unpack_record`.
 - **Decoder rules:** Mirror rules (with **1111** / CONFLICT-005 suspension), invalid rounding nibble, **L1 CRC**, **compound context** check after unpack, optional **`validate_batch_integrity`** for Rule 5 when callers have counts.
-- **CLI:** `setup`, `encode` (raw `--A`/`--r` or `--amount`, profile/L1/L2 overrides, `--out` `.bl`, `--emit-l2`, `--description`), `decode` (hex or `--in`), `simulate`; exit codes for usage vs protocol errors.
+- **CLI:** `setup`, `encode` (raw `--A`/`--r` or `--amount`, profile/L1/L2 overrides, `--out` `.bl`, `--emit-l2`, `--description`, **`--rounding-report`**), `decode` (hex or `--in`, **`--rounding-report`** / **`--compare-amount`**), `make` / `check-amount` / `suggest-sf` (**`--rounding-report`**, **`make --json`** + **`rounding_observation`** when both flags set), `simulate`; exit codes for usage vs protocol errors.
 - **Profiles:** JSON save/load; **default** name overwrite guarded unless `force` / `setup --force`.
 - **Human output:** Layer headers, README-style journal (optional binary/hex from `n40`), compact record summary / pipe-grouped binary.
 - **Quality gate:** `python -m pytest tests/` (see `system/config/test-baseline.yaml`).
@@ -29,7 +29,7 @@ Consolidated from implementation review: **what is solid**, **edge cases** (reje
 - **`N` range:** `N` must be in **0 … 33,554,431**; above → `EncoderError` (overflow).
 - **`S` (optimal split):** must be **0 … 17** for `decompose`; outside → `EncoderError`.
 - **`encode_value`:** **`float`** rejected; use **`Decimal`**.
-- **SF index vs wire:** Value layer accepts **`sf_index` only in `SCALING_FACTORS` range (0–17)**. Layer 2 still carries a **7-bit** SF field (0–127); indices **≥ 18** are an edge case (likely failure at encode/decode value, not necessarily at Layer 2 unpack alone).
+- **SF index vs wire:** Value layer accepts **`sf_index` in `SCALING_FACTORS` range (0–127)**, matching the Layer 2 **7-bit** field. Indices outside the table length remain a hard error at encode/decode value.
 - **Rounding nibble:** **`rounding_flag == 0`** and **`rounding_dir == 1`** illegal on encode (`serialise`) and decode (Rule 3).
 - **Decimal wire `111` (D=7):** not implemented → `EncoderError` from `_wire_dp_to_d`; decode: **`decimal_position_wire > 6`** → `DecoderError`.
 
@@ -80,8 +80,8 @@ Consolidated from implementation review: **what is solid**, **edge cases** (reje
 
 ## 10. Backlog — high-impact test / doc follow-ups
 
-- Explicit tests or docs for **SF wire 18–127** vs table **0–17** (error surface and intended product behavior).
-- **Quantity vs non-quantity** confusion and golden vectors in CLI help or `cli_readme.md`.
+- ~~Explicit tests or docs for **SF wire 18–127** vs table **0–17**~~ — **addressed:** table **0–127**, tests include high-SF vector; see `project/analysis/value_encoding_scaling_factor_reference.md`.
+- **Quantity vs non-quantity** — **`--quantity-present`** on **`make` / `check-amount` / `suggest-sf`** aligns suggested `encode`, JSON `quantity_present`, and rounding-report decode with quantity mode; still room for more golden vectors in `cli_readme.md`.
 - **Short-form defaults** vs real batch mismatch (negative test or warning).
 - **Multi-record sessions**, framing, control streams, batch close (Rule 5) in a small reference orchestration or CLI subcommand (if in scope).
 
@@ -120,7 +120,7 @@ Ordered for **impact / cohesion** vs **new surface area**.
 
 ### Tier C — trust and spec clarity (docs/tests, little CLI)
 
-5. **SF 18–127** — document “wire vs table” and single failure mode; extend table only when spec demands.
+5. **SF 18–127** — **done** in reference implementation (128-entry `SCALING_FACTORS`); remaining work is spec cross-refs only if external docs still say 0–17.
 6. **Quantity + short-form** — one doc diagram + 2–3 pytest cases; no new flags unless decode warns on suspicious `0x6F`+amount mismatch.
 
 ### Tier D — defer (scope / sprawl risk)
@@ -137,3 +137,6 @@ Ordered for **impact / cohesion** vs **new surface area**.
 - `bitledger/PLAN_value_cli_ux.md` — value UX phases (merge `check-amount` into `make` where possible).
 - `bitledger/system/config/test-baseline.yaml` — suggested pytest commands by change type.
 - `bitledger/bitledger/encoder.py`, `decoder.py`, `cli_encode.py` — primary raise sites for protocol errors.
+- `bitledger/project/analysis/value_encoding_scaling_factor_reference.md` — value ladder, exact-first SF, \(N_{\max}\).
+- `bitledger/project/analysis/bitledger_notation_reference.md` — symbol table and rounding observability notes.
+- `bitledger/project/analysis/work_session_autonomous.md` — periodic autonomous implementation summaries.

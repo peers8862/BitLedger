@@ -35,16 +35,16 @@ Related context: [`backlog_april18.md`](backlog_april18.md), [`cli_readme.md`](c
 - **`encode --auto-sf`** + **`--min-sf` / `--max-sf`**, conflict with **`--sf`**, uses **`find_smallest_sf`** (`tests/test_cli_encode_advanced.py`).
 - **`make`** / **`suggest-sf`** already covered smallest-SF search (Phase 0.5).
 
-**Policy note:** Wire allows SF **7-bit**; table today is **0–17** ([`backlog_april18.md`](backlog_april18.md) §3).
+**Policy note:** Wire allows SF **7-bit**; reference **`SCALING_FACTORS`** table is **0–127** (see [`backlog_april18.md`](backlog_april18.md), [`value_encoding_scaling_factor_reference.md`](project/analysis/value_encoding_scaling_factor_reference.md)).
 
 ---
 
-## Phase 3 — Rounding engagement on `encode` — *partially done*
+## Phase 3 — Rounding engagement on `encode` — *mostly done*
 
 | Item | Status |
 |------|--------|
 | **3.1** Require **`--accept-rounding`** when **`--amount`** implies `rf=1` | **Done** (stderr hint points to `check-amount` / `make`). |
-| **3.2** Extra verbose block on encode | *Deferred* (optional). |
+| **3.2** Structured rounding footer | **`--rounding-report`** on **`encode` / `decode` / `make` / `check-amount`** (`rounding_report.py`); **`make --json --rounding-report`** adds **`rounding_observation`**; **`decode --compare-amount`** for \(\Delta\) when auditing. |
 | **3.3** Journal precision line | Already reflects `rf` from record. |
 
 ---

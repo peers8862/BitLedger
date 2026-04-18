@@ -4,6 +4,8 @@
 
 This document is a condensed technical reference for the BitLedger binary financial transmission protocol. For the complete specification including full worked examples, value range tables, and CRC-15 implementation, see `BitLedger_Protocol_v3.docx`.
 
+**Python reference monographs (this repo):** [value encoding & SF ladder](../analysis/value_encoding_scaling_factor_reference.md) · [notation & rounding observability](../analysis/bitledger_notation_reference.md).
+
 ---
 
 ## Table of Contents

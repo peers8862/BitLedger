@@ -6,6 +6,8 @@
 **Audience:** implementers, auditors, and researchers extending BitLedger’s monetary value path  
 **Scope:** Layer 2–3 value semantics as implemented in this repository (`encode_value`, `decode_value`, SF search in the CLI), not full protocol stack or hardware bit layouts except where they constrain mathematics  
 
+**Symbols:** see **[`bitledger_notation_reference.md`](./bitledger_notation_reference.md)** (standalone tables + rounding observability audit).
+
 ---
 
 ## 1. Introduction
@@ -261,6 +263,14 @@ When auditing changes to this subsystem, reviewers should verify:
 - `encode_value` and `decode_value` use the same upper bound (`len(SCALING_FACTORS)`).  
 - `find_smallest_sf` two-pass logic preserves **E** vs **L** semantics under `--legacy-sf-search`.  
 - CLI defaults for `--max-sf` remain consistent across `make`, `check-amount`, `suggest-sf`, and `encode --auto-sf`.
+
+---
+
+## Appendix A — Notation (moved)
+
+The full symbol table, Layer 2 `rounding_balance` row, and a **rounding observability** audit (what exists vs gaps before coding) live in:
+
+**[`bitledger_notation_reference.md`](./bitledger_notation_reference.md)**
 
 ---
 
