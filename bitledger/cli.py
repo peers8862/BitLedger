@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
-from decimal import InvalidOperation
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from bitledger import decoder, encoder, formatter
+from bitledger import decoder, encoder, formatter, rounding_report
 from bitledger.cli_encode import apply_encode_overrides
 from bitledger.cli_make import (
     add_make_arguments,
     cmd_check_amount,
     cmd_make,
+    emit_rounding_report_for_plan,
     find_smallest_sf,
     parse_amount_string,
 )
@@ -71,12 +72,14 @@ def cmd_encode(ns: argparse.Namespace) -> int:
     ):
         print("--max-sf must be >= --min-sf", file=sys.stderr)
         return 1
+    encoded_amount: Decimal | None = None
     if ns.amount is not None:
         try:
             amt = parse_amount_string(ns.amount)
         except (InvalidOperation, ValueError) as e:
             print(f"Invalid --amount: {e}", file=sys.stderr)
             return 1
+        encoded_amount = amt
         dp = l2.decimal_position & 7
         S = l2.optimal_split & 0xF
         pair = ns.account_pair & 0xF
@@ -165,6 +168,20 @@ def cmd_encode(ns: argparse.Namespace) -> int:
         return 2
     if ns.out:
         _write_bl(Path(ns.out), blob)
+    obs_encode = None
+    if getattr(ns, "rounding_report", False) and encoded_amount is not None:
+        obs_encode = rounding_report.observation_from_encode_amount(
+            encoded_amount,
+            A=rec.multiplicand,
+            r=rec.multiplier,
+            S=l2.optimal_split & 0xF,
+            sf_index=l2.scaling_factor_index,
+            dp_wire=l2.decimal_position & 7,
+            rf=int(rec.rounding_flag),
+            rd=rec.rounding_dir,
+            account_pair=rec.account_pair,
+            quantity_present=rec.quantity_present,
+        )
     if not ns.quiet:
         print(formatter.format_layer1_header(l1), end="")
         print(formatter.format_layer2_header(l2), end="")
@@ -175,6 +192,8 @@ def cmd_encode(ns: argparse.Namespace) -> int:
             current_currency=l2.currency_code,
             current_sf_index=l2.scaling_factor_index,
         )
+        if obs_encode is not None and obs_encode.delta is not None:
+            ss.batch_rounding_sum += obs_encode.delta
         print(
             formatter.format_journal(
                 rec, ss, n40=n40, description=getattr(ns, "description", "") or ""
@@ -183,6 +202,14 @@ def cmd_encode(ns: argparse.Namespace) -> int:
         )
         print(formatter.format_record_summary(rec, n40), end="")
         print(f"Wrote {len(blob)} bytes to {ns.out}" if ns.out else f"Emit {len(blob)} bytes (pass --out file.bl)")
+    if getattr(ns, "rounding_report", False):
+        if encoded_amount is None:
+            print(
+                "encode: --rounding-report applies when --amount is set (typed − wire).",
+                file=sys.stderr,
+            )
+        elif obs_encode is not None:
+            print(rounding_report.format_aggregate([obs_encode]), end="")
     return 0
 
 
@@ -225,6 +252,34 @@ def cmd_decode(ns: argparse.Namespace) -> int:
         print(formatter.format_layer2_header(l2), end="")
         print(formatter.format_journal(rec, ss, n40=n40), end="")
         print(formatter.format_record_summary(rec, n40), end="")
+    if getattr(ns, "rounding_report", False):
+        cmp_raw = getattr(ns, "compare_amount", None)
+        cmp_amt = None
+        if cmp_raw:
+            try:
+                cmp_amt = parse_amount_string(cmp_raw)
+            except (InvalidOperation, ValueError) as e:
+                print(f"decode: invalid --compare-amount: {e}", file=sys.stderr)
+                return 1
+        obs = rounding_report.observation_from_decode(
+            compare_value=cmp_amt,
+            A=rec.multiplicand,
+            r=rec.multiplier,
+            S=l2.optimal_split & 0xF,
+            sf_index=l2.scaling_factor_index,
+            dp_wire=l2.decimal_position & 7,
+            rf=rec.rounding_flag,
+            rd=rec.rounding_dir,
+            account_pair=rec.account_pair,
+            quantity_present=rec.quantity_present,
+        )
+        print(rounding_report.format_aggregate([obs]), end="")
+        if cmp_raw is None:
+            print(
+                "decode: use --compare-amount DECIMAL with --rounding-report for typed−wire "
+                "Δ sum/mean.",
+                file=sys.stderr,
+            )
     return 0
 
 
@@ -312,6 +367,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="With --amount: allow encode when rounding_flag would be set",
     )
+    pe.add_argument(
+        "--rounding-report",
+        action="store_true",
+        help="With --amount: print typed−wire table, scale (k, dp), and Δ sum/mean",
+    )
     pe.add_argument("--currency", type=int, help="Layer2 currency_code 0-63")
     pe.add_argument("--txtype", type=int, choices=(1, 2, 3), help="Layer2 transmission_type")
     pe.add_argument("--compound-prefix", type=int, help="Layer2 compound_prefix 0-3")
@@ -349,6 +409,17 @@ def main(argv: list[str] | None = None) -> int:
     pd.add_argument("--quiet", action="store_true")
     pd.add_argument("--in", dest="in_path", help="Binary .bl file path")
     pd.add_argument("record_hex", nargs="?", default=None, help="Continuous hex (optional if --in)")
+    pd.add_argument(
+        "--rounding-report",
+        action="store_true",
+        help="Print scale (SF index, dp), wire amount, optional Δ vs --compare-amount",
+    )
+    pd.add_argument(
+        "--compare-amount",
+        metavar="DECIMAL",
+        default=None,
+        help="With --rounding-report: typed amount to compare (Δ = typed − wire)",
+    )
     pd.set_defaults(func=cmd_decode)
 
     pm = sub.add_parser("simulate", help="Encode/decode smoke test")

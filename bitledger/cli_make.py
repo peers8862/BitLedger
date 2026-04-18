@@ -109,6 +109,26 @@ class EncodingPlan:
     debit_credit: int
     split_order: int
     sf_banner: str | None  # e.g. line printed before report when SF was searched
+    quantity_present: bool
+
+
+def emit_rounding_report_for_plan(plan: EncodingPlan) -> None:
+    """One-row aggregate for make / check-amount (matches suggested `encode` quantity flag)."""
+    from bitledger import rounding_report as rr
+
+    obs = rr.observation_from_encode_amount(
+        plan.amount,
+        A=plan.A,
+        r=plan.r,
+        S=plan.S,
+        sf_index=plan.sf,
+        dp_wire=plan.dp,
+        rf=plan.rf,
+        rd=plan.rd,
+        account_pair=plan.pair,
+        quantity_present=plan.quantity_present,
+    )
+    print(rr.format_aggregate([obs]), end="")
 
 
 def resolve_encoding_plan(
@@ -138,6 +158,7 @@ def resolve_encoding_plan(
     dp = l2.decimal_position & 7
     S = l2.optimal_split & 0xF
     pair = ns.account_pair & 0xF
+    qty = bool(int(getattr(ns, "quantity_present", 0)))
     lo = int(ns.min_sf)
     hi = int(ns.max_sf)
     if hi < lo:
@@ -197,6 +218,7 @@ def resolve_encoding_plan(
         debit_credit=ns.debit_credit,
         split_order=ns.split_order,
         sf_banner=sf_banner,
+        quantity_present=qty,
     )
     return plan, None
 
@@ -206,7 +228,7 @@ def _emit_make_report(plan: EncodingPlan) -> None:
     R = plan.amount * (Decimal(10) ** plan.dp) / SF
     mode = encoder.rounding_mode(plan.pair)
     decoded = decoder.decode_value(
-        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=False
+        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=plan.quantity_present
     )
     delta = plan.amount - decoded
 
@@ -218,6 +240,8 @@ def _emit_make_report(plan: EncodingPlan) -> None:
     print(f"Wire scaling:        SF index = {plan.sf}  (×{SF} = 10^{plan.sf})")
     print(f"Decimal position:    dp = {plan.dp}  (divide by 10^{plan.dp} on decode)")
     print(f"Optimal split S:     {plan.S}")
+    if plan.quantity_present:
+        print("Quantity mode:       decode uses N = A × r for wire value (see rounding report).")
     print(f"Account pair:        {plan.pair:#04b}  rounding_mode = {mode!r}")
     print(f"R = amount×10^dp/SF: {R}")
     print(f"Stored integer N:    {plan.N}  (max wire 33,554,431)")
@@ -241,6 +265,8 @@ def _emit_make_report(plan: EncodingPlan) -> None:
         parts += ["--currency", str(plan.currency)]
     if plan.rf:
         parts += ["--accept-rounding"]
+    if plan.quantity_present:
+        parts += ["--quantity-present", "1"]
     line = "bitledger " + " ".join(shlex.quote(p) for p in parts)
     print(line)
 
@@ -258,6 +284,8 @@ def suggested_encode_argv(plan: EncodingPlan) -> list[str]:
         parts += ["--currency", str(plan.currency)]
     if plan.rf:
         parts += ["--accept-rounding"]
+    if plan.quantity_present:
+        parts += ["--quantity-present", "1"]
     return parts
 
 
@@ -266,7 +294,7 @@ def plan_as_json_dict(plan: EncodingPlan) -> dict:
     R = plan.amount * (Decimal(10) ** plan.dp) / SF
     mode = encoder.rounding_mode(plan.pair)
     decoded = decoder.decode_value(
-        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=False
+        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=plan.quantity_present
     )
     return {
         "amount": str(plan.amount),
@@ -286,6 +314,7 @@ def plan_as_json_dict(plan: EncodingPlan) -> dict:
         "decoded_wire_value": str(decoded),
         "delta_typed_minus_decoded": str(plan.amount - decoded),
         "sf_search_banner": plan.sf_banner,
+        "quantity_present": plan.quantity_present,
         "suggested_encode_argv": suggested_encode_argv(plan),
     }
 
@@ -296,7 +325,7 @@ def _emit_check_amount_report(plan: EncodingPlan) -> None:
     R = plan.amount * (Decimal(10) ** plan.dp) / SF
     mode = encoder.rounding_mode(plan.pair)
     decoded = decoder.decode_value(
-        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=False
+        plan.A, plan.r, plan.S, plan.sf, plan.dp, quantity_present=plan.quantity_present
     )
     delta = plan.amount - decoded
 
@@ -333,9 +362,28 @@ def cmd_make(ns: argparse.Namespace) -> int:
         return code
     plan = resolved[0]
     if getattr(ns, "json", False):
-        print(json.dumps(plan_as_json_dict(plan), indent=2))
+        payload = plan_as_json_dict(plan)
+        if getattr(ns, "rounding_report", False):
+            from bitledger import rounding_report as rr
+
+            obs = rr.observation_from_encode_amount(
+                plan.amount,
+                A=plan.A,
+                r=plan.r,
+                S=plan.S,
+                sf_index=plan.sf,
+                dp_wire=plan.dp,
+                rf=plan.rf,
+                rd=plan.rd,
+                account_pair=plan.pair,
+                quantity_present=plan.quantity_present,
+            )
+            payload["rounding_observation"] = rr.observation_to_jsondict(obs)
+        print(json.dumps(payload, indent=2))
         return 0
     _emit_make_report(plan)
+    if getattr(ns, "rounding_report", False):
+        emit_rounding_report_for_plan(plan)
     return 0
 
 
@@ -345,7 +393,10 @@ def cmd_check_amount(ns: argparse.Namespace) -> int:
         code, msg = resolved[1]
         print(msg, file=sys.stderr)
         return code
-    _emit_check_amount_report(resolved[0])
+    plan = resolved[0]
+    _emit_check_amount_report(plan)
+    if getattr(ns, "rounding_report", False):
+        emit_rounding_report_for_plan(plan)
     return 0
 
 
@@ -384,6 +435,11 @@ def add_make_arguments(p: argparse.ArgumentParser) -> None:
         help="When searching SF: first ascending index with any valid encoding (ignore exact-first)",
     )
     p.add_argument(
+        "--rounding-report",
+        action="store_true",
+        help="Append typed−wire rounding block (scale k, dp; Δ sum/mean)",
+    )
+    p.add_argument(
         "--emit-l2",
         choices=("auto", "short", "full"),
         default="auto",
@@ -401,6 +457,13 @@ def add_make_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sep-file", type=int)
     p.add_argument("--optimal-split", type=int)
     p.add_argument("--dp", type=int)
+    p.add_argument(
+        "--quantity-present",
+        type=int,
+        default=0,
+        choices=(0, 1),
+        help="1 = quantity mode on suggested encode / decode in reports (N = A×r)",
+    )
     p.add_argument("--account-pair", type=int, default=4)
     p.add_argument("--direction", type=int, default=0)
     p.add_argument("--status", type=int, default=0)
