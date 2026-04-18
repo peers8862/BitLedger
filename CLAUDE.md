@@ -6,10 +6,10 @@ This file is the primary context document for all Claude agent sessions working 
 
 ## Project
 
-BitLedger is a Python command-line tool that implements the BitLedger Binary Financial Transmission Protocol. The protocol carries complete double-entry accounting transactions in a compact binary footprint (40 bits per transaction). The tool provides four modes: `setup` (profile wizard), `encode` (transaction entry), `decode` (binary → journal entry), and `simulate` (full session demo).
+BitLedger is a Python command-line tool that implements the BitLedger Binary Financial Transmission Protocol. The protocol carries complete double-entry accounting transactions in a compact binary footprint (40 bits per transaction). The tool provides: `setup` (profile wizard), `profile list|use|show` (active pointer + discovery), `make` / `suggest-sf` (primary plan + suggested `encode`; optional `--json`), `check-amount` (verification printout), `encode` (with `--amount`, `--auto-sf`, `--accept-rounding` as needed), `decode`, and `simulate`.
 
 **Install path:** `/Users/mp/making/bitledger`
-**Entry point:** `bitledger/bitledger.py`
+**Entry point:** `bitledger/bitledger.py` → `main` (re-exports `bitledger.cli:main`; console script `bitledger`)
 **CLI command:** `bitledger`
 
 ---

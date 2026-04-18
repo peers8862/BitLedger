@@ -18,7 +18,7 @@ Per-file access policy. Referenced from CLAUDE.md. Updated by Orchestrator only.
 
 | File | Reason |
 |---|---|
-| `bitledger/bitledger.py` | All command routing passes through here. Parallel edits cause merge conflicts that are hard to resolve correctly. |
+| `bitledger/bitledger.py` | Thin entry re-export; `bitledger/cli.py` holds routing. Parallel edits cause merge conflicts that are hard to resolve correctly. |
 
 ---
 
