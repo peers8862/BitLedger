@@ -343,6 +343,8 @@ def _emit_check_amount_report(plan: EncodingPlan) -> None:
     print(f"Amount (parsed):      {plan.amount}")
     print(f"SF index / scale:     {plan.sf}  (×{SF})")
     print(f"dp / S / pair:        dp={plan.dp}   S={plan.S}   pair={plan.pair:#04b}  mode={mode!r}")
+    if plan.quantity_present:
+        print("Quantity mode:        decode uses N = A × r (quantity_present flag set in Layer 3).")
     print(f"R = amount×10^dp/SF:  {R}")
     print(f"Integer N (≤33.55M):  {plan.N}")
     print(f"A / r:                A={plan.A}   r={plan.r}   composite N={(plan.A << plan.S) | plan.r}")

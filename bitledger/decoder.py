@@ -158,3 +158,25 @@ def decode_value(
     num = Decimal(N) * SF
     den = Decimal(10) ** D
     return num / den
+
+
+def check_short_form_mismatch(profile_l2: Layer2Config) -> list[str]:
+    """Return list of Layer2Config field names where profile_l2 differs from 0x6F defaults.
+
+    Call this when 0x6F is decoded and a profile was loaded. A non-empty list means
+    the wire short-form implies different session settings than the loaded profile,
+    which may cause silent semantic errors in value decoding.
+    """
+    defaults = Layer2Config()
+    mismatched: list[str] = []
+    for fname in (
+        "scaling_factor_index",
+        "optimal_split",
+        "decimal_position",
+        "transmission_type",
+        "currency_code",
+        "compound_prefix",
+    ):
+        if getattr(profile_l2, fname) != getattr(defaults, fname):
+            mismatched.append(fname)
+    return mismatched

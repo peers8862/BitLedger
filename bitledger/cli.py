@@ -17,7 +17,10 @@ from bitledger.cli_make import (
     find_smallest_sf,
     parse_amount_string,
 )
-from bitledger.errors import DecoderError, EncoderError, ProfileError
+from bitledger.errors import DecoderError, DecoderWarning, EncoderError, ProfileError
+from bitledger.config import load_master_config
+from bitledger import decoder as _decoder_mod
+from bitledger.cli_help import cmd_help
 from bitledger.models import Layer1Config, Layer2Config, SessionState, TransactionRecord
 from bitledger.cli_profile import add_profile_cli, effective_profile_path
 from bitledger.profiles import load_profile, save_profile
@@ -228,7 +231,8 @@ def cmd_decode(ns: argparse.Namespace) -> int:
     try:
         l1 = decoder.unpack_layer1(raw[:8])
         rest = raw[8:]
-        if rest and rest[0] == encoder.LAYER2_SHORT_FORM:
+        short_form_used = bool(rest and rest[0] == encoder.LAYER2_SHORT_FORM)
+        if short_form_used:
             l2 = Layer2Config()
             body = rest[1:]
         else:
@@ -240,6 +244,30 @@ def cmd_decode(ns: argparse.Namespace) -> int:
     except (DecoderError, OSError, ValueError) as e:
         print(str(e), file=sys.stderr)
         return 2
+    # Short-form mismatch check
+    if short_form_used:
+        pp = getattr(ns, "profile", None)
+        profile_l2: Layer2Config | None = None
+        if pp:
+            try:
+                _, profile_l2 = load_profile(Path(pp))
+            except ProfileError:
+                pass
+        if profile_l2 is not None:
+            cfg = load_master_config()
+            if cfg.warn_short_form_mismatch:
+                mismatched = _decoder_mod.check_short_form_mismatch(profile_l2)
+                if mismatched:
+                    w = DecoderWarning(
+                        f"Short-form 0x6F decoded but loaded profile differs in: {', '.join(mismatched)}",
+                        suggestion=(
+                            "Re-encode the sender record with --emit-l2 full, or verify "
+                            "sender session matches 0x6F defaults (SF=0, dp=0, split=0, txtype=1, currency=0)."
+                        ),
+                        ref="Layer 2 short-form 0x6F — cli_readme.md §Layer 2 short-form",
+                        suppressed_by="warn_short_form_mismatch",
+                    )
+                    print(w.format_compact(), file=sys.stderr)
     if not ns.quiet:
         ss = SessionState(
             layer1=l1,
@@ -410,6 +438,10 @@ def main(argv: list[str] | None = None) -> int:
     pd.add_argument("--in", dest="in_path", help="Binary .bl file path")
     pd.add_argument("record_hex", nargs="?", default=None, help="Continuous hex (optional if --in)")
     pd.add_argument(
+        "--profile",
+        help="Profile JSON to compare against short-form 0x6F (warns on mismatch)",
+    )
+    pd.add_argument(
         "--rounding-report",
         action="store_true",
         help="Print scale (SF index, dp), wire amount, optional Δ vs --compare-amount",
@@ -455,6 +487,10 @@ def main(argv: list[str] | None = None) -> int:
     pchk.set_defaults(func=cmd_check_amount)
 
     add_profile_cli(sub)
+
+    ph = sub.add_parser("help", help="Show command listing; --extra for full protocol guide")
+    ph.add_argument("--extra", action="store_true", help="Print full guide: protocol, norms, workflows, config")
+    ph.set_defaults(func=cmd_help)
 
     ns = p.parse_args(argv)
     try:

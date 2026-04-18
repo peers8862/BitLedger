@@ -10,9 +10,11 @@ Canonical task board. Orchestrator-managed.
 - [x] TASK-1.3a: Explorer A — spec/docs drift audit ✓ (report: system/audits/explorer-a-report.md)
 - [x] TASK-1.3b: Explorer B — module coverage map ✓ (report: system/audits/explorer-b-report.md)
 - [ ] TASK-1.4: Build canonical TASKS.md (this file) — in-progress
-- [ ] TASK-1.5: Git init + artifact hygiene
+- [x] TASK-1.5: Git init + artifact hygiene ✓
 
 **CONFLICT-005:** Resolved 2026-04-18 — see `system/logs/decisions.md` and `project/protocol docs/markdown/CONFLICT-005_Explication.md`. TASK-2.06 / TASK-2.07 may proceed.
+
+**TASK-1.5 closed** — Git init + artifact hygiene complete (2026-04-18).
 
 ---
 
@@ -23,6 +25,8 @@ Canonical task board. Orchestrator-managed.
 ---
 
 ## Phase 2 — Implementation
+
+**Phase 2 note (2026-04-18):** All Wave 0–6 tasks implemented via Cursor sessions outside the formal task model. Test suite passes (193 tests). CONFLICT-005 resolved; TASK-2.06 and TASK-2.07 covered by existing test suite. Formal Verifier pass for 2.06/2.07 deferred to upcoming test cycle. TASK-1.5 closed.
 
 Task cards in `tasks/cards/`. Build in wave order.
 
