@@ -207,6 +207,65 @@ bitledger decode --in txn.bl
 
 ---
 
+## Quantity mode (`--quantity-present`)
+
+When `--quantity-present 1` is passed, the value field encodes a quantity product:
+
+    N = A × r      (standard mode: N = (A << S) | r)
+
+This is useful when A is a unit count and r is a unit price, or any multiplicative decomposition where both factors have independent meaning.
+
+### Examples
+
+**Plan a quantity record:**
+```
+bitledger make --amount 59.76 --quantity-present 1
+```
+
+**Encode a quantity record:**
+```
+bitledger encode --amount 59.76 --quantity-present 1 --auto-sf --out qty.bl
+```
+
+**Decode it back:**
+```
+bitledger decode --in qty.bl
+```
+
+**Machine-readable plan:**
+```
+bitledger make --amount 59.76 --quantity-present 1 --json
+```
+Output JSON will include `"quantity_present": true` and `"suggested_encode_argv"` with `--quantity-present 1`.
+
+**Verify without encode block:**
+```
+bitledger check-amount --amount 59.76 --quantity-present 1
+```
+
+### Notes
+
+- `quantity_present` is stored in bit 8 of the Layer 3 record.
+- The `optimal_split` (S) from Layer 2 is irrelevant to the value field in quantity mode, but still present in the header.
+- Rounding semantics are identical: if the amount cannot be encoded exactly, `--accept-rounding` is required.
+- Protocol reference: README.md §Layer 3 value field, §quantity_present flag.
+
+---
+
+## Extended help (`bitledger help`)
+
+```
+bitledger help              # Command listing with one-line descriptions
+bitledger help --extra      # Full guide: protocol, norms, workflows, config locations
+```
+
+Per-command flags are always available via:
+```
+bitledger <command> --help
+```
+
+---
+
 ## `simulate`
 
 | Flag | Description |
