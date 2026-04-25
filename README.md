@@ -6,7 +6,7 @@ A complete double-entry accounting record and transmission standard engineered f
 
 ---
 
-## What It Is
+# What It Is
 
 BitLedger is a binary-native protocol for recording and transmitting financial transactions. It was designed from first principles at the binary representation of accounting states, not by compressing an existing format. The result is a structure where every bit position carries defined meaning, the rules of double-entry accounting are enforced at the encoding level, and the most common transaction costs exactly 5 bytes with no extensions required.
 
